@@ -24,7 +24,7 @@ function App() {
     loadData();
   }, []);
 
-  const handleOfficerAdded = () => {
+  const handleOfficersUpdated = () => {
     const updatedOfficers = loadHouseOfficers();
     setOfficers(updatedOfficers);
   };
@@ -66,10 +66,10 @@ function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <HouseOfficerForm onOfficerAdded={handleOfficerAdded} />
+        <HouseOfficerForm onOfficerAdded={handleOfficersUpdated} />
         
         {officers.length > 0 ? (
-          <Dashboard officers={officers} />
+          <Dashboard officers={officers} onOfficersUpdated={handleOfficersUpdated} />
         ) : (
           <div className="bg-white rounded-xl shadow-lg p-12 text-center">
             <div className="p-4 bg-blue-100 rounded-full w-20 h-20 mx-auto mb-6 flex items-center justify-center">

@@ -12,11 +12,12 @@ import {
   LineElement,
 } from 'chart.js';
 import { Bar, Pie } from 'react-chartjs-2';
-import { Download, Filter, Search, Calendar, Users, TrendingUp } from 'lucide-react';
+import { Download, Filter, Search, Calendar, Users, TrendingUp, Edit, Trash2, Check, X } from 'lucide-react';
 import { HouseOfficer, FilterOptions } from '../types';
-import { formatDate, isUpcoming } from '../utils/dateUtils';
+import { formatDate, isUpcoming, calculateSignOutDate } from '../utils/dateUtils';
 import { generatePDF } from '../utils/pdfExport';
 import { createBulkCalendarEvents } from '../utils/calendarIntegration';
+import { updateHouseOfficer, deleteHouseOfficer } from '../utils/storage';
 
 ChartJS.register(
   CategoryScale,
@@ -32,14 +33,29 @@ ChartJS.register(
 
 interface Props {
   officers: HouseOfficer[];
+  onOfficersUpdated: () => void;
 }
 
 const COLORS = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16', '#F97316'];
 
-export const Dashboard: React.FC<Props> = ({ officers }) => {
+const UNITS = [
+  'Cardiology 1',
+  'Cardiology 2',
+  'Nephrology',
+  'Neurology',
+  'Endocrinology',
+  'Pulmonology',
+  'Gastroenterology',
+  'Infectious Disease/Dermatology',
+  'Rheumatology'
+];
+
+export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
   const [selectedOfficers, setSelectedOfficers] = useState<string[]>([]);
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [signature, setSignature] = useState('');
+  const [editingOfficer, setEditingOfficer] = useState<string | null>(null);
+  const [editFormData, setEditFormData] = useState<Partial<HouseOfficer>>({});
   const [filters, setFilters] = useState<FilterOptions>({
     unit: '',
     gender: '',
@@ -182,6 +198,48 @@ export const Dashboard: React.FC<Props> = ({ officers }) => {
         ? [] 
         : filteredOfficers.map(o => o.id)
     );
+  };
+
+  const startEditing = (officer: HouseOfficer) => {
+    setEditingOfficer(officer.id);
+    setEditFormData(officer);
+  };
+
+  const cancelEditing = () => {
+    setEditingOfficer(null);
+    setEditFormData({});
+  };
+
+  const saveOfficer = () => {
+    if (!editFormData.fullName?.trim() || !editFormData.unitAssigned || !editFormData.clinicalPresentationTopic?.trim()) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    const updatedOfficer = {
+      ...editFormData,
+      expectedSignOutDate: editFormData.dateSignedIn ? calculateSignOutDate(editFormData.dateSignedIn) : editFormData.expectedSignOutDate
+    } as HouseOfficer;
+
+    updateHouseOfficer(editingOfficer!, updatedOfficer);
+    setEditingOfficer(null);
+    setEditFormData({});
+    onOfficersUpdated();
+  };
+
+  const handleDeleteOfficer = (officerId: string, officerName: string) => {
+    if (window.confirm(`Are you sure you want to delete ${officerName}? This action cannot be undone.`)) {
+      deleteHouseOfficer(officerId);
+      setSelectedOfficers(prev => prev.filter(id => id !== officerId));
+      onOfficersUpdated();
+    }
+  };
+
+  const handleEditInputChange = (field: keyof HouseOfficer, value: string) => {
+    setEditFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
   const units = [...new Set(officers.map(o => o.unitAssigned))];
@@ -377,6 +435,7 @@ export const Dashboard: React.FC<Props> = ({ officers }) => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sign In</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Presentation</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sign Out</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -391,33 +450,138 @@ export const Dashboard: React.FC<Props> = ({ officers }) => {
                     />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{officer.fullName}</div>
+                    {editingOfficer === officer.id ? (
+                      <input
+                        type="text"
+                        value={editFormData.fullName || ''}
+                        onChange={(e) => handleEditInputChange('fullName', e.target.value)}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    ) : (
+                      <div className="text-sm font-medium text-gray-900">{officer.fullName}</div>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      officer.gender === 'Male' 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : 'bg-pink-100 text-pink-800'
-                    }`}>
-                      {officer.gender}
-                    </span>
+                    {editingOfficer === officer.id ? (
+                      <select
+                        value={editFormData.gender || ''}
+                        onChange={(e) => handleEditInputChange('gender', e.target.value)}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                      </select>
+                    ) : (
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        officer.gender === 'Male' 
+                          ? 'bg-blue-100 text-blue-800' 
+                          : 'bg-pink-100 text-pink-800'
+                      }`}>
+                        {officer.gender}
+                      </span>
+                    )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{officer.unitAssigned}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title={officer.clinicalPresentationTopic}>
-                    {officer.clinicalPresentationTopic}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {editingOfficer === officer.id ? (
+                      <select
+                        value={editFormData.unitAssigned || ''}
+                        onChange={(e) => handleEditInputChange('unitAssigned', e.target.value)}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        {UNITS.map(unit => (
+                          <option key={unit} value={unit}>{unit}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="text-sm text-gray-900">{officer.unitAssigned}</div>
+                    )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {formatDate(officer.dateSignedIn)}
+                  <td className="px-6 py-4">
+                    {editingOfficer === officer.id ? (
+                      <input
+                        type="text"
+                        value={editFormData.clinicalPresentationTopic || ''}
+                        onChange={(e) => handleEditInputChange('clinicalPresentationTopic', e.target.value)}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    ) : (
+                      <div className="text-sm text-gray-900 max-w-xs truncate" title={officer.clinicalPresentationTopic}>
+                        {officer.clinicalPresentationTopic}
+                      </div>
+                    )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <span className={isUpcoming(officer.clinicalPresentationDate) ? 'text-green-600 font-semibold' : ''}>
-                      {formatDate(officer.clinicalPresentationDate)}
-                    </span>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {editingOfficer === officer.id ? (
+                      <input
+                        type="date"
+                        value={editFormData.dateSignedIn || ''}
+                        onChange={(e) => handleEditInputChange('dateSignedIn', e.target.value)}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    ) : (
+                      <div className="text-sm text-gray-900">{formatDate(officer.dateSignedIn)}</div>
+                    )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <span className={isUpcoming(officer.expectedSignOutDate) ? 'text-orange-600 font-semibold' : ''}>
-                      {formatDate(officer.expectedSignOutDate)}
-                    </span>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {editingOfficer === officer.id ? (
+                      <input
+                        type="date"
+                        value={editFormData.clinicalPresentationDate || ''}
+                        onChange={(e) => handleEditInputChange('clinicalPresentationDate', e.target.value)}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    ) : (
+                      <div className={`text-sm ${isUpcoming(officer.clinicalPresentationDate) ? 'text-green-600 font-semibold' : 'text-gray-900'}`}>
+                        {formatDate(officer.clinicalPresentationDate)}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className={`text-sm ${isUpcoming(officer.expectedSignOutDate) ? 'text-orange-600 font-semibold' : 'text-gray-900'}`}>
+                      {editFormData.dateSignedIn && editingOfficer === officer.id 
+                        ? formatDate(calculateSignOutDate(editFormData.dateSignedIn))
+                        : formatDate(officer.expectedSignOutDate)
+                      }
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      {editingOfficer === officer.id ? (
+                        <>
+                          <button
+                            onClick={saveOfficer}
+                            className="p-1 text-green-600 hover:text-green-800 hover:bg-green-100 rounded transition-colors"
+                            title="Save changes"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={cancelEditing}
+                            className="p-1 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+                            title="Cancel editing"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => startEditing(officer)}
+                            className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors"
+                            title="Edit officer"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteOfficer(officer.id, officer.fullName)}
+                            className="p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded transition-colors"
+                            title="Delete officer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
