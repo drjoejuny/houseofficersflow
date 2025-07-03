@@ -1,0 +1,428 @@
+import React, { useState, useRef } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
+import { Download, Filter, Search, Calendar, Users, TrendingUp } from 'lucide-react';
+import { HouseOfficer, FilterOptions } from '../types';
+import { formatDate, isUpcoming } from '../utils/dateUtils';
+import { generatePDF } from '../utils/pdfExport';
+import { createBulkCalendarEvents } from '../utils/calendarIntegration';
+
+interface Props {
+  officers: HouseOfficer[];
+}
+
+const COLORS = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16', '#F97316'];
+
+export const Dashboard: React.FC<Props> = ({ officers }) => {
+  const [selectedOfficers, setSelectedOfficers] = useState<string[]>([]);
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [signature, setSignature] = useState('');
+  const [filters, setFilters] = useState<FilterOptions>({
+    unit: '',
+    gender: '',
+    searchTerm: '',
+    sortBy: 'fullName',
+    sortOrder: 'asc'
+  });
+
+  const dashboardRef = useRef<HTMLDivElement>(null);
+
+  // Filter and sort officers
+  const filteredOfficers = officers
+    .filter(officer => {
+      const matchesUnit = !filters.unit || officer.unitAssigned === filters.unit;
+      const matchesGender = !filters.gender || officer.gender === filters.gender;
+      const matchesSearch = !filters.searchTerm || 
+        officer.fullName.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
+        officer.clinicalPresentationTopic.toLowerCase().includes(filters.searchTerm.toLowerCase());
+      
+      return matchesUnit && matchesGender && matchesSearch;
+    })
+    .sort((a, b) => {
+      const aValue = a[filters.sortBy];
+      const bValue = b[filters.sortBy];
+      const comparison = aValue.localeCompare(bValue);
+      return filters.sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+  // Calculate statistics
+  const stats = {
+    total: filteredOfficers.length,
+    male: filteredOfficers.filter(o => o.gender === 'Male').length,
+    female: filteredOfficers.filter(o => o.gender === 'Female').length,
+    upcomingPresentations: filteredOfficers.filter(o => isUpcoming(o.clinicalPresentationDate)).length,
+    upcomingSignOuts: filteredOfficers.filter(o => isUpcoming(o.expectedSignOutDate)).length
+  };
+
+  // Chart data
+  const unitData = Object.entries(
+    filteredOfficers.reduce((acc, officer) => {
+      acc[officer.unitAssigned] = (acc[officer.unitAssigned] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>)
+  ).map(([unit, count]) => ({ unit: unit.replace('/', '/\n'), count }));
+
+  const genderData = [
+    { name: 'Male', value: stats.male, color: '#3B82F6' },
+    { name: 'Female', value: stats.female, color: '#EC4899' }
+  ];
+
+  const timelineData = filteredOfficers.map(officer => ({
+    name: officer.fullName.split(' ')[0],
+    signIn: new Date(officer.dateSignedIn).getTime(),
+    presentation: new Date(officer.clinicalPresentationDate).getTime(),
+    signOut: new Date(officer.expectedSignOutDate).getTime()
+  }));
+
+  const handleExportPDF = async () => {
+    if (!signature.trim()) {
+      alert('Please enter your full name as signature');
+      return;
+    }
+
+    const officersToExport = selectedOfficers.length > 0 
+      ? filteredOfficers.filter(o => selectedOfficers.includes(o.id))
+      : filteredOfficers;
+
+    try {
+      await generatePDF(officersToExport, signature, dashboardRef.current || undefined);
+      setShowSignatureModal(false);
+      setSignature('');
+      setSelectedOfficers([]);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Error generating PDF. Please try again.');
+    }
+  };
+
+  const toggleOfficerSelection = (officerId: string) => {
+    setSelectedOfficers(prev => 
+      prev.includes(officerId) 
+        ? prev.filter(id => id !== officerId)
+        : [...prev, officerId]
+    );
+  };
+
+  const selectAllOfficers = () => {
+    setSelectedOfficers(
+      selectedOfficers.length === filteredOfficers.length 
+        ? [] 
+        : filteredOfficers.map(o => o.id)
+    );
+  };
+
+  const units = [...new Set(officers.map(o => o.unitAssigned))];
+
+  return (
+    <div className="space-y-8">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="bg-white p-6 rounded-xl shadow-lg">
+          <div className="flex items-center gap-3">
+            <Users className="w-8 h-8 text-blue-600" />
+            <div>
+              <p className="text-sm text-gray-600">Total Officers</p>
+              <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white p-6 rounded-xl shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+              <span className="text-blue-600 font-bold">M</span>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Male</p>
+              <p className="text-2xl font-bold text-gray-800">{stats.male}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-pink-100 rounded-full flex items-center justify-center">
+              <span className="text-pink-600 font-bold">F</span>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Female</p>
+              <p className="text-2xl font-bold text-gray-800">{stats.female}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-lg">
+          <div className="flex items-center gap-3">
+            <Calendar className="w-8 h-8 text-green-600" />
+            <div>
+              <p className="text-sm text-gray-600">Upcoming Presentations</p>
+              <p className="text-2xl font-bold text-gray-800">{stats.upcomingPresentations}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-lg">
+          <div className="flex items-center gap-3">
+            <TrendingUp className="w-8 h-8 text-orange-600" />
+            <div>
+              <p className="text-sm text-gray-600">Upcoming Sign Outs</p>
+              <p className="text-2xl font-bold text-gray-800">{stats.upcomingSignOuts}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white p-6 rounded-xl shadow-lg">
+        <div className="flex items-center gap-3 mb-4">
+          <Filter className="w-5 h-5 text-gray-600" />
+          <h3 className="text-lg font-semibold text-gray-800">Filters & Search</h3>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search officers..."
+              value={filters.searchTerm}
+              onChange={(e) => setFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <select
+            value={filters.unit}
+            onChange={(e) => setFilters(prev => ({ ...prev, unit: e.target.value }))}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="">All Units</option>
+            {units.map(unit => (
+              <option key={unit} value={unit}>{unit}</option>
+            ))}
+          </select>
+
+          <select
+            value={filters.gender}
+            onChange={(e) => setFilters(prev => ({ ...prev, gender: e.target.value }))}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="">All Genders</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+          </select>
+
+          <select
+            value={`${filters.sortBy}-${filters.sortOrder}`}
+            onChange={(e) => {
+              const [sortBy, sortOrder] = e.target.value.split('-');
+              setFilters(prev => ({ 
+                ...prev, 
+                sortBy: sortBy as FilterOptions['sortBy'], 
+                sortOrder: sortOrder as FilterOptions['sortOrder']
+              }));
+            }}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="fullName-asc">Name (A-Z)</option>
+            <option value="fullName-desc">Name (Z-A)</option>
+            <option value="dateSignedIn-asc">Sign In (Oldest)</option>
+            <option value="dateSignedIn-desc">Sign In (Newest)</option>
+            <option value="clinicalPresentationDate-asc">Presentation (Earliest)</option>
+            <option value="clinicalPresentationDate-desc">Presentation (Latest)</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Charts */}
+      <div ref={dashboardRef} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-6 rounded-xl shadow-lg">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">Officers by Unit</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={unitData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="unit" 
+                angle={-45}
+                textAnchor="end"
+                height={80}
+                fontSize={10}
+              />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="count" fill="#3B82F6" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-lg">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">Gender Distribution</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie
+                data={genderData}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                outerRadius={80}
+                fill="#8884d8"
+                dataKey="value"
+              >
+                {genderData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Officers Table */}
+      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <h3 className="text-lg font-semibold text-gray-800">House Officers List</h3>
+            <div className="flex gap-2">
+              <button
+                onClick={selectAllOfficers}
+                className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+              >
+                {selectedOfficers.length === filteredOfficers.length ? 'Deselect All' : 'Select All'}
+              </button>
+              <button
+                onClick={() => createBulkCalendarEvents(
+                  selectedOfficers.length > 0 
+                    ? filteredOfficers.filter(o => selectedOfficers.includes(o.id))
+                    : filteredOfficers
+                )}
+                className="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2"
+              >
+                <Calendar className="w-4 h-4" />
+                Add to Calendar
+              </button>
+              <button
+                onClick={() => setShowSignatureModal(true)}
+                className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Export PDF ({selectedOfficers.length || filteredOfficers.length})
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <input
+                    type="checkbox"
+                    checked={selectedOfficers.length === filteredOfficers.length && filteredOfficers.length > 0}
+                    onChange={selectAllOfficers}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gender</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Topic</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sign In</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Presentation</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sign Out</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredOfficers.map((officer) => (
+                <tr key={officer.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={selectedOfficers.includes(officer.id)}
+                      onChange={() => toggleOfficerSelection(officer.id)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">{officer.fullName}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      officer.gender === 'Male' 
+                        ? 'bg-blue-100 text-blue-800' 
+                        : 'bg-pink-100 text-pink-800'
+                    }`}>
+                      {officer.gender}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{officer.unitAssigned}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title={officer.clinicalPresentationTopic}>
+                    {officer.clinicalPresentationTopic}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {formatDate(officer.dateSignedIn)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <span className={isUpcoming(officer.clinicalPresentationDate) ? 'text-green-600 font-semibold' : ''}>
+                      {formatDate(officer.clinicalPresentationDate)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <span className={isUpcoming(officer.expectedSignOutDate) ? 'text-orange-600 font-semibold' : ''}>
+                      {formatDate(officer.expectedSignOutDate)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {filteredOfficers.length === 0 && (
+          <div className="text-center py-12">
+            <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500">No house officers found matching your criteria.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Signature Modal */}
+      {showSignatureModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Digital Signature Required</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Please enter your full name as a digital signature for the PDF export.
+            </p>
+            <input
+              type="text"
+              value={signature}
+              onChange={(e) => setSignature(e.target.value)}
+              placeholder="Enter your full name"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-4"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowSignatureModal(false);
+                  setSignature('');
+                }}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleExportPDF}
+                disabled={!signature.trim()}
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors"
+              >
+                Export PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
