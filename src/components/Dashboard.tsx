@@ -1,10 +1,34 @@
 import React, { useState, useRef } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  PointElement,
+  LineElement,
+} from 'chart.js';
+import { Bar, Pie } from 'react-chartjs-2';
 import { Download, Filter, Search, Calendar, Users, TrendingUp } from 'lucide-react';
 import { HouseOfficer, FilterOptions } from '../types';
 import { formatDate, isUpcoming } from '../utils/dateUtils';
 import { generatePDF } from '../utils/pdfExport';
 import { createBulkCalendarEvents } from '../utils/calendarIntegration';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  PointElement,
+  LineElement
+);
 
 interface Props {
   officers: HouseOfficer[];
@@ -61,17 +85,67 @@ export const Dashboard: React.FC<Props> = ({ officers }) => {
     }, {} as Record<string, number>)
   ).map(([unit, count]) => ({ unit: unit.replace('/', '/\n'), count }));
 
-  const genderData = [
-    { name: 'Male', value: stats.male, color: '#3B82F6' },
-    { name: 'Female', value: stats.female, color: '#EC4899' }
-  ];
+  const barChartData = {
+    labels: unitData.map(item => item.unit),
+    datasets: [
+      {
+        label: 'Officers',
+        data: unitData.map(item => item.count),
+        backgroundColor: '#3B82F6',
+        borderColor: '#2563EB',
+        borderWidth: 1,
+      },
+    ],
+  };
 
-  const timelineData = filteredOfficers.map(officer => ({
-    name: officer.fullName.split(' ')[0],
-    signIn: new Date(officer.dateSignedIn).getTime(),
-    presentation: new Date(officer.clinicalPresentationDate).getTime(),
-    signOut: new Date(officer.expectedSignOutDate).getTime()
-  }));
+  const barChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      title: {
+        display: false,
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          stepSize: 1,
+        },
+      },
+      x: {
+        ticks: {
+          maxRotation: 45,
+          minRotation: 0,
+        },
+      },
+    },
+  };
+
+  const pieChartData = {
+    labels: ['Male', 'Female'],
+    datasets: [
+      {
+        data: [stats.male, stats.female],
+        backgroundColor: ['#3B82F6', '#EC4899'],
+        borderColor: ['#2563EB', '#DB2777'],
+        borderWidth: 2,
+      },
+    ],
+  };
+
+  const pieChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom' as const,
+      },
+    },
+  };
 
   const handleExportPDF = async () => {
     if (!signature.trim()) {
@@ -237,44 +311,16 @@ export const Dashboard: React.FC<Props> = ({ officers }) => {
       <div ref={dashboardRef} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-white p-6 rounded-xl shadow-lg">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">Officers by Unit</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={unitData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="unit" 
-                angle={-45}
-                textAnchor="end"
-                height={80}
-                fontSize={10}
-              />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="count" fill="#3B82F6" />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="h-80">
+            <Bar data={barChartData} options={barChartOptions} />
+          </div>
         </div>
 
         <div className="bg-white p-6 rounded-xl shadow-lg">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">Gender Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={genderData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
-                outerRadius={80}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {genderData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="h-80">
+            <Pie data={pieChartData} options={pieChartOptions} />
+          </div>
         </div>
       </div>
 
