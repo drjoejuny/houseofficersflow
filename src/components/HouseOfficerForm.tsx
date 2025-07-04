@@ -45,7 +45,7 @@ export const HouseOfficerForm: React.FC<Props> = ({ onOfficerAdded }) => {
         createdAt: new Date().toISOString()
       };
 
-      addHouseOfficer(newOfficer);
+      await addHouseOfficer(newOfficer);
       
       // Reset form
       setFormData({

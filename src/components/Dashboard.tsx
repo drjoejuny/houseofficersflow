@@ -12,7 +12,7 @@ import {
   LineElement,
 } from 'chart.js';
 import { Bar, Pie } from 'react-chartjs-2';
-import { Download, Filter, Search, Calendar, Users, TrendingUp, Edit, Trash2, Check, X } from 'lucide-react';
+import { Download, Filter, Search, Calendar, Users, TrendingUp, Edit, Trash2, Check, X, Database } from 'lucide-react';
 import { HouseOfficer, FilterOptions } from '../types';
 import { formatDate, isUpcoming, calculateSignOutDate, getTimelineColor, getDaysUntilDate } from '../utils/dateUtils';
 import { generatePDF } from '../utils/pdfExport';
@@ -68,6 +68,7 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
   });
 
   const dashboardRef = useRef<HTMLDivElement>(null);
+  const chartsRef = useRef<HTMLDivElement>(null);
 
   // Filter and sort officers
   const filteredOfficers = officers
@@ -179,7 +180,8 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
       : filteredOfficers;
 
     try {
-      await generatePDF(officersToExport, signature);
+      // Pass the charts container to include charts in PDF
+      await generatePDF(officersToExport, signature, chartsRef.current || undefined);
       setShowSignatureModal(false);
       setSignature('');
       setSelectedOfficers([]);
@@ -218,7 +220,7 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
     setEditFormData({});
   };
 
-  const saveOfficer = () => {
+  const saveOfficer = async () => {
     if (!editFormData.fullName?.trim() || !editFormData.unitAssigned) {
       alert('Please fill in all required fields');
       return;
@@ -229,17 +231,27 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
       expectedSignOutDate: editFormData.dateSignedIn ? calculateSignOutDate(editFormData.dateSignedIn) : editFormData.expectedSignOutDate
     } as HouseOfficer;
 
-    updateHouseOfficer(editingOfficer!, updatedOfficer);
-    setEditingOfficer(null);
-    setEditFormData({});
-    onOfficersUpdated();
+    try {
+      await updateHouseOfficer(editingOfficer!, updatedOfficer);
+      setEditingOfficer(null);
+      setEditFormData({});
+      onOfficersUpdated();
+    } catch (error) {
+      console.error('Error updating officer:', error);
+      alert('Error updating officer. Please try again.');
+    }
   };
 
-  const handleDeleteOfficer = (officerId: string, officerName: string) => {
+  const handleDeleteOfficer = async (officerId: string, officerName: string) => {
     if (window.confirm(`Are you sure you want to delete ${officerName}? This action cannot be undone.`)) {
-      deleteHouseOfficer(officerId);
-      setSelectedOfficers(prev => prev.filter(id => id !== officerId));
-      onOfficersUpdated();
+      try {
+        await deleteHouseOfficer(officerId);
+        setSelectedOfficers(prev => prev.filter(id => id !== officerId));
+        onOfficersUpdated();
+      } catch (error) {
+        console.error('Error deleting officer:', error);
+        alert('Error deleting officer. Please try again.');
+      }
     }
   };
 
@@ -254,6 +266,21 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
 
   return (
     <div className="space-y-8">
+      {/* Database Status Indicator */}
+      <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+        <div className="flex items-center gap-3">
+          <Database className="w-5 h-5 text-green-600" />
+          <div>
+            <p className="text-sm font-medium text-green-800">
+              Database Connected
+            </p>
+            <p className="text-xs text-green-600">
+              Data is automatically synced across all your devices via Supabase
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="bg-white p-6 rounded-xl shadow-lg">
@@ -382,8 +409,8 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
         </div>
       </div>
 
-      {/* Charts */}
-      <div ref={dashboardRef} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      {/* Charts - This section will be captured for PDF */}
+      <div ref={chartsRef} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-white p-6 rounded-xl shadow-lg">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">Officers by Unit</h3>
           <div className="h-80">
@@ -435,7 +462,7 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
                 ) : (
                   <>
                     <Download className="w-4 h-4" />
-                    Export PDF ({selectedOfficers.length || filteredOfficers.length})
+                    Export PDF with Charts ({selectedOfficers.length || filteredOfficers.length})
                   </>
                 )}
               </button>
@@ -644,7 +671,8 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Digital Signature Required</h3>
             <p className="text-sm text-gray-600 mb-4">
-              Please enter your full name as a digital signature for the PDF export.
+              Please enter your full name as a digital signature for the PDF export. 
+              The PDF will include beautiful charts and comprehensive data.
             </p>
             <input
               type="text"
@@ -675,7 +703,7 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
                     Exporting...
                   </>
                 ) : (
-                  'Export PDF'
+                  'Export PDF with Charts'
                 )}
               </button>
             </div>

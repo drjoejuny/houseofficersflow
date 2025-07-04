@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Heart } from 'lucide-react';
+import { Activity, Heart, AlertCircle } from 'lucide-react';
 import { HouseOfficerForm } from './components/HouseOfficerForm';
 import { Dashboard } from './components/Dashboard';
 import { HouseOfficer } from './types';
@@ -8,14 +8,26 @@ import { loadHouseOfficers } from './utils/storage';
 function App() {
   const [officers, setOfficers] = useState<HouseOfficer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadData = () => {
+    const loadData = async () => {
       try {
-        const savedOfficers = loadHouseOfficers();
+        setError(null);
+        const savedOfficers = await loadHouseOfficers();
         setOfficers(savedOfficers);
       } catch (error) {
         console.error('Error loading officers:', error);
+        setError('Failed to load data. Using local storage as fallback.');
+        // Try to load from localStorage as fallback
+        try {
+          const localData = localStorage.getItem('house_officers_data');
+          if (localData) {
+            setOfficers(JSON.parse(localData));
+          }
+        } catch (localError) {
+          console.error('Local storage also failed:', localError);
+        }
       } finally {
         setLoading(false);
       }
@@ -24,9 +36,15 @@ function App() {
     loadData();
   }, []);
 
-  const handleOfficersUpdated = () => {
-    const updatedOfficers = loadHouseOfficers();
-    setOfficers(updatedOfficers);
+  const handleOfficersUpdated = async () => {
+    try {
+      const updatedOfficers = await loadHouseOfficers();
+      setOfficers(updatedOfficers);
+      setError(null);
+    } catch (error) {
+      console.error('Error updating officers:', error);
+      setError('Failed to sync with database. Changes saved locally.');
+    }
   };
 
   if (loading) {
@@ -64,6 +82,16 @@ function App() {
         </div>
       </header>
 
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+          <div className="flex items-center max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <AlertCircle className="w-5 h-5 text-yellow-400 mr-3" />
+            <p className="text-yellow-800 text-sm">{error}</p>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <HouseOfficerForm onOfficerAdded={handleOfficersUpdated} />
@@ -85,7 +113,7 @@ function App() {
             <div className="bg-blue-50 p-4 rounded-lg">
               <p className="text-sm text-blue-800">
                 <strong>Features:</strong> Track rotations, manage presentations, 
-                export reports, and integrate with Google Calendar.
+                export reports with charts, sync across devices, and integrate with Google Calendar.
               </p>
             </div>
           </div>

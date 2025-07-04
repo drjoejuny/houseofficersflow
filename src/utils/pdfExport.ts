@@ -28,6 +28,52 @@ export const generatePDF = async (
     
     let yPosition = 70;
     
+    // Add charts if provided
+    if (chartElement) {
+      try {
+        pdf.setFontSize(12);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Dashboard Charts', 20, yPosition);
+        yPosition += 10;
+        
+        const canvas = await html2canvas(chartElement, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+          width: chartElement.scrollWidth,
+          height: chartElement.scrollHeight
+        });
+        
+        const imgData = canvas.toDataURL('image/png', 0.95);
+        const imgWidth = pageWidth - 40;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        
+        // Check if we need a new page for the chart
+        if (yPosition + imgHeight > pageHeight - 40) {
+          pdf.addPage();
+          yPosition = 20;
+          pdf.setFontSize(12);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text('Dashboard Charts', 20, yPosition);
+          yPosition += 10;
+        }
+        
+        pdf.addImage(imgData, 'PNG', 20, yPosition, imgWidth, imgHeight);
+        yPosition += imgHeight + 15;
+        
+        // Add new page for the rest of the content
+        if (yPosition > pageHeight - 100) {
+          pdf.addPage();
+          yPosition = 20;
+        }
+      } catch (chartError) {
+        console.warn('Could not add charts to PDF:', chartError);
+        // Continue without charts
+      }
+    }
+    
     // Summary statistics
     pdf.setFontSize(12);
     pdf.setFont('helvetica', 'bold');
@@ -197,7 +243,7 @@ export const generatePDF = async (
       });
     }
     
-    // Footer on last page
+    // Footer on all pages
     const totalPages = pdf.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       pdf.setPage(i);
