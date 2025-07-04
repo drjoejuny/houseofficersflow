@@ -61,7 +61,9 @@ export const HouseOfficerForm: React.FC<Props> = ({ onOfficerAdded }) => {
       
       // Optionally create calendar events
       if (window.confirm('Would you like to add this to Google Calendar?')) {
-        createGoogleCalendarEvent(newOfficer, 'presentation');
+        if (newOfficer.clinicalPresentationDate) {
+          createGoogleCalendarEvent(newOfficer, 'presentation');
+        }
         setTimeout(() => createGoogleCalendarEvent(newOfficer, 'signout'), 1000);
       }
     } catch (error) {
@@ -93,7 +95,7 @@ export const HouseOfficerForm: React.FC<Props> = ({ onOfficerAdded }) => {
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
             <User className="w-4 h-4" />
-            Full Name
+            Full Name *
           </label>
           <input
             type="text"
@@ -109,7 +111,7 @@ export const HouseOfficerForm: React.FC<Props> = ({ onOfficerAdded }) => {
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
             <User className="w-4 h-4" />
-            Gender
+            Gender *
           </label>
           <select
             name="gender"
@@ -126,7 +128,7 @@ export const HouseOfficerForm: React.FC<Props> = ({ onOfficerAdded }) => {
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
             <Calendar className="w-4 h-4" />
-            Date Signed In
+            Date Signed In *
           </label>
           <input
             type="date"
@@ -141,7 +143,7 @@ export const HouseOfficerForm: React.FC<Props> = ({ onOfficerAdded }) => {
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
             <MapPin className="w-4 h-4" />
-            Unit Assigned
+            Unit Assigned *
           </label>
           <select
             name="unitAssigned"
@@ -161,15 +163,15 @@ export const HouseOfficerForm: React.FC<Props> = ({ onOfficerAdded }) => {
           <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
             <FileText className="w-4 h-4" />
             Clinical Presentation Topic
+            <span className="text-xs text-gray-500">(optional)</span>
           </label>
           <input
             type="text"
             name="clinicalPresentationTopic"
             value={formData.clinicalPresentationTopic}
             onChange={handleInputChange}
-            required
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-            placeholder="Enter presentation topic"
+            placeholder="Enter presentation topic (optional)"
           />
         </div>
 
@@ -177,13 +179,13 @@ export const HouseOfficerForm: React.FC<Props> = ({ onOfficerAdded }) => {
           <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
             <Clock className="w-4 h-4" />
             Clinical Presentation Date
+            <span className="text-xs text-gray-500">(optional)</span>
           </label>
           <input
             type="date"
             name="clinicalPresentationDate"
             value={formData.clinicalPresentationDate}
             onChange={handleInputChange}
-            required
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
           />
         </div>
@@ -191,7 +193,8 @@ export const HouseOfficerForm: React.FC<Props> = ({ onOfficerAdded }) => {
         {formData.dateSignedIn && (
           <div className="md:col-span-2 p-4 bg-blue-50 rounded-lg">
             <p className="text-sm text-blue-800">
-              <strong>Expected Sign Out Date:</strong> {calculateSignOutDate(formData.dateSignedIn)}
+              <strong>Expected Sign Out Date:</strong> {calculateSignOutDate(formData.dateSignedIn)} 
+              <span className="text-xs text-blue-600 ml-2">(12 weeks / 84 days from sign-in)</span>
             </p>
           </div>
         )}

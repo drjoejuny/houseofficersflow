@@ -14,10 +14,12 @@ import {
 import { Bar, Pie } from 'react-chartjs-2';
 import { Download, Filter, Search, Calendar, Users, TrendingUp, Edit, Trash2, Check, X } from 'lucide-react';
 import { HouseOfficer, FilterOptions } from '../types';
-import { formatDate, isUpcoming, calculateSignOutDate } from '../utils/dateUtils';
+import { formatDate, isUpcoming, calculateSignOutDate, getTimelineColor, getDaysUntilDate } from '../utils/dateUtils';
 import { generatePDF } from '../utils/pdfExport';
 import { createBulkCalendarEvents } from '../utils/calendarIntegration';
 import { updateHouseOfficer, deleteHouseOfficer } from '../utils/storage';
+import { TimelineChart } from './TimelineChart';
+import { PriorityAllocation } from './PriorityAllocation';
 
 ChartJS.register(
   CategoryScale,
@@ -73,7 +75,7 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
       const matchesGender = !filters.gender || officer.gender === filters.gender;
       const matchesSearch = !filters.searchTerm || 
         officer.fullName.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
-        officer.clinicalPresentationTopic.toLowerCase().includes(filters.searchTerm.toLowerCase());
+        (officer.clinicalPresentationTopic && officer.clinicalPresentationTopic.toLowerCase().includes(filters.searchTerm.toLowerCase()));
       
       return matchesUnit && matchesGender && matchesSearch;
     })
@@ -89,7 +91,7 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
     total: filteredOfficers.length,
     male: filteredOfficers.filter(o => o.gender === 'Male').length,
     female: filteredOfficers.filter(o => o.gender === 'Female').length,
-    upcomingPresentations: filteredOfficers.filter(o => isUpcoming(o.clinicalPresentationDate)).length,
+    upcomingPresentations: filteredOfficers.filter(o => o.clinicalPresentationDate && isUpcoming(o.clinicalPresentationDate)).length,
     upcomingSignOuts: filteredOfficers.filter(o => isUpcoming(o.expectedSignOutDate)).length
   };
 
@@ -211,7 +213,7 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
   };
 
   const saveOfficer = () => {
-    if (!editFormData.fullName?.trim() || !editFormData.unitAssigned || !editFormData.clinicalPresentationTopic?.trim()) {
+    if (!editFormData.fullName?.trim() || !editFormData.unitAssigned) {
       alert('Please fill in all required fields');
       return;
     }
@@ -301,6 +303,15 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Priority Allocation */}
+      <PriorityAllocation officers={officers} />
+
+      {/* Timeline Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <TimelineChart officers={officers} type="signout" />
+        <TimelineChart officers={officers} type="presentation" />
       </div>
 
       {/* Filters */}
@@ -503,10 +514,11 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
                         value={editFormData.clinicalPresentationTopic || ''}
                         onChange={(e) => handleEditInputChange('clinicalPresentationTopic', e.target.value)}
                         className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Optional"
                       />
                     ) : (
-                      <div className="text-sm text-gray-900 max-w-xs truncate" title={officer.clinicalPresentationTopic}>
-                        {officer.clinicalPresentationTopic}
+                      <div className="text-sm text-gray-900 max-w-xs truncate" title={officer.clinicalPresentationTopic || 'Not specified'}>
+                        {officer.clinicalPresentationTopic || <span className="text-gray-400 italic">Not specified</span>}
                       </div>
                     )}
                   </td>
@@ -531,17 +543,30 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
                         className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     ) : (
-                      <div className={`text-sm ${isUpcoming(officer.clinicalPresentationDate) ? 'text-green-600 font-semibold' : 'text-gray-900'}`}>
-                        {formatDate(officer.clinicalPresentationDate)}
+                      <div className={`text-sm ${
+                        officer.clinicalPresentationDate && isUpcoming(officer.clinicalPresentationDate) 
+                          ? 'text-green-600 font-semibold' 
+                          : 'text-gray-900'
+                      }`}>
+                        {officer.clinicalPresentationDate 
+                          ? formatDate(officer.clinicalPresentationDate)
+                          : <span className="text-gray-400 italic">Not scheduled</span>
+                        }
                       </div>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className={`text-sm ${isUpcoming(officer.expectedSignOutDate) ? 'text-orange-600 font-semibold' : 'text-gray-900'}`}>
-                      {editFormData.dateSignedIn && editingOfficer === officer.id 
-                        ? formatDate(calculateSignOutDate(editFormData.dateSignedIn))
-                        : formatDate(officer.expectedSignOutDate)
-                      }
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${getTimelineColor(officer.expectedSignOutDate)}`}></div>
+                      <div className={`text-sm ${isUpcoming(officer.expectedSignOutDate) ? 'text-orange-600 font-semibold' : 'text-gray-900'}`}>
+                        {editFormData.dateSignedIn && editingOfficer === officer.id 
+                          ? formatDate(calculateSignOutDate(editFormData.dateSignedIn))
+                          : formatDate(officer.expectedSignOutDate)
+                        }
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        ({getDaysUntilDate(officer.expectedSignOutDate)}d)
+                      </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">

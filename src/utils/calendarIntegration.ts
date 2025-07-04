@@ -9,13 +9,17 @@ export const createGoogleCalendarEvent = (officer: HouseOfficer, eventType: 'pre
   let details: string;
   
   if (eventType === 'presentation') {
+    if (!officer.clinicalPresentationDate) {
+      alert('No presentation date set for this officer');
+      return;
+    }
     title = `Clinical Presentation - ${officer.fullName}`;
     date = officer.clinicalPresentationDate;
-    details = `House Officer: ${officer.fullName}%0AUnit: ${officer.unitAssigned}%0ATopic: ${officer.clinicalPresentationTopic}%0AGender: ${officer.gender}`;
+    details = `House Officer: ${officer.fullName}%0AUnit: ${officer.unitAssigned}%0ATopic: ${officer.clinicalPresentationTopic || 'Not specified'}%0AGender: ${officer.gender}`;
   } else {
     title = `Sign Out - ${officer.fullName}`;
     date = officer.expectedSignOutDate;
-    details = `House Officer: ${officer.fullName}%0AUnit: ${officer.unitAssigned}%0AExpected Sign Out Date%0AGender: ${officer.gender}`;
+    details = `House Officer: ${officer.fullName}%0AUnit: ${officer.unitAssigned}%0AExpected Sign Out Date (12 weeks from sign-in)%0AGender: ${officer.gender}`;
   }
   
   const startDate = date.replace(/-/g, '');
@@ -27,8 +31,10 @@ export const createGoogleCalendarEvent = (officer: HouseOfficer, eventType: 'pre
 };
 
 export const createBulkCalendarEvents = (officers: HouseOfficer[]): void => {
-  officers.forEach(officer => {
-    setTimeout(() => createGoogleCalendarEvent(officer, 'presentation'), 100);
-    setTimeout(() => createGoogleCalendarEvent(officer, 'signout'), 200);
+  officers.forEach((officer, index) => {
+    if (officer.clinicalPresentationDate) {
+      setTimeout(() => createGoogleCalendarEvent(officer, 'presentation'), index * 100);
+    }
+    setTimeout(() => createGoogleCalendarEvent(officer, 'signout'), (index * 100) + 50);
   });
 };
