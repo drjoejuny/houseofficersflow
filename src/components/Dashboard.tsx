@@ -58,6 +58,7 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
   const [signature, setSignature] = useState('');
   const [editingOfficer, setEditingOfficer] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<Partial<HouseOfficer>>({});
+  const [isExporting, setIsExporting] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({
     unit: '',
     gender: '',
@@ -171,18 +172,23 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
       return;
     }
 
+    setIsExporting(true);
+
     const officersToExport = selectedOfficers.length > 0 
       ? filteredOfficers.filter(o => selectedOfficers.includes(o.id))
       : filteredOfficers;
 
     try {
-      await generatePDF(officersToExport, signature, dashboardRef.current || undefined);
+      await generatePDF(officersToExport, signature);
       setShowSignatureModal(false);
       setSignature('');
       setSelectedOfficers([]);
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('Error generating PDF. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`PDF Export Failed: ${errorMessage}`);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -418,10 +424,20 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
               </button>
               <button
                 onClick={() => setShowSignatureModal(true)}
-                className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                disabled={isExporting}
+                className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors flex items-center gap-2"
               >
-                <Download className="w-4 h-4" />
-                Export PDF ({selectedOfficers.length || filteredOfficers.length})
+                {isExporting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    Export PDF ({selectedOfficers.length || filteredOfficers.length})
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -643,16 +659,24 @@ export const Dashboard: React.FC<Props> = ({ officers, onOfficersUpdated }) => {
                   setShowSignatureModal(false);
                   setSignature('');
                 }}
-                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                disabled={isExporting}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-200 rounded-lg transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleExportPDF}
-                disabled={!signature.trim()}
-                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors"
+                disabled={!signature.trim() || isExporting}
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
               >
-                Export PDF
+                {isExporting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Exporting...
+                  </>
+                ) : (
+                  'Export PDF'
+                )}
               </button>
             </div>
           </div>
